@@ -1,0 +1,26 @@
+name: Deploy to Self-Hosted
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create .env File
+        run: |
+          echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" > .env
+
+      - name: Build and Restart Containers
+        run: |
+          docker compose build --pull streamer-bot
+          docker compose up -d --no-deps --force-recreate streamer-bot
+        
+      - name: Cleanup Old Containers
+        run: |
+          docker image prune -f

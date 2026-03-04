@@ -1,0 +1,8 @@
+﻿services:
+  streamer-bot:
+    image: streamerbot
+    build:
+      context: .
+      dockerfile: StreamerBot/Dockerfile
+    environment:
+      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
