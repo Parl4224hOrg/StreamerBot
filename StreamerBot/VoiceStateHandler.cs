@@ -53,6 +53,25 @@ public class VoiceStateHandler(
             if (!guild.Channels.TryGetValue(channelId, out var channel) || channel is not StageGuildChannel)
                 return;
 
+            var botInSameStage = guild.VoiceStates.TryGetValue(botUserId, out var botVoiceState) &&
+                                 botVoiceState.ChannelId == channelId;
+            var botIsSuppressedInStage = botInSameStage && botVoiceState?.Suppressed == true;
+            if (botIsSuppressedInStage)
+            {
+                try
+                {
+                    await restClient.ModifyCurrentGuildUserVoiceStateAsync(
+                        newState.GuildId,
+                        options => options
+                            .WithChannelId(channelId)
+                            .WithSuppress(false));
+                }
+                catch (RestException ex) when (ex is { StatusCode: HttpStatusCode.NotFound, Error.Code: UnknownVoiceStateCode })
+                {
+                    // Discord can return Unknown Voice State briefly while state changes propagate.
+                }
+            }
+
             if (!guild.Users.TryGetValue(newState.UserId, out var guildUser))
                 return;
 
@@ -88,8 +107,6 @@ public class VoiceStateHandler(
                 }
             }
 
-            var botInSameStage = guild.VoiceStates.TryGetValue(botUserId, out var botVoiceState) &&
-                                 botVoiceState.ChannelId == channelId;
             var botAlreadySelfMuted = botVoiceState?.IsSelfMuted == true;
             var botAlreadySelfDeafened = botVoiceState?.IsSelfDeafened == true;
 
@@ -101,7 +118,6 @@ public class VoiceStateHandler(
                         .WithSelfDeaf());
             }
 
-            var botIsSuppressedInStage = botInSameStage && botVoiceState?.Suppressed == true;
             if (!botIsSuppressedInStage)
                 return;
 

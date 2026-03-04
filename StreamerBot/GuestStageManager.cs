@@ -42,7 +42,7 @@ public class GuestStageManager(GatewayClient gatewayClient, RestClient restClien
 
     public async Task ProcessExpiredSpeakersAsync()
     {
-        var expired = guestQueueService.GetExpiredSpeakers(DateTimeOffset.UtcNow.AddMinutes(-2));
+        var expired = guestQueueService.GetExpiredSpeakers(DateTimeOffset.UtcNow.AddMinutes(-1));
 
         foreach (var session in expired)
         {
