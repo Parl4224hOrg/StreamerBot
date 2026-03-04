@@ -12,10 +12,36 @@ public class VoiceStateHandler(GatewayClient gatewayClient, RestClient restClien
 
     public async ValueTask HandleAsync(VoiceState newState)
     {
-        if (newState.ChannelId is null)
+        if (!gatewayClient.Cache.Guilds.TryGetValue(newState.GuildId, out var guild))
             return;
 
-        if (!gatewayClient.Cache.Guilds.TryGetValue(newState.GuildId, out var guild))
+        var botUser = gatewayClient.Cache.User;
+        if (botUser is null)
+            return;
+
+        var botUserId = botUser.Id;
+        if (guild.VoiceStates.TryGetValue(botUserId, out var botState) && botState.ChannelId is { } botChannelId)
+        {
+            var hasOtherSpeakers = guild.VoiceStates.Values.Any(vs =>
+            {
+                if (vs.UserId == botUserId)
+                    return false;
+
+                // Use incoming event state for the updated user to avoid stale-cache behavior on leave events.
+                if (vs.UserId == newState.UserId)
+                    return newState.ChannelId == botChannelId && !newState.Suppressed;
+
+                return vs.ChannelId == botChannelId && !vs.Suppressed;
+            });
+
+            if (!hasOtherSpeakers)
+            {
+                await gatewayClient.UpdateVoiceStateAsync(new VoiceStateProperties(newState.GuildId, null));
+                return;
+            }
+        }
+
+        if (newState.ChannelId is null)
             return;
 
         var channelId = newState.ChannelId.Value;
@@ -57,11 +83,6 @@ public class VoiceStateHandler(GatewayClient gatewayClient, RestClient restClien
             }
         }
 
-        var botUser = gatewayClient.Cache.User;
-        if (botUser is null)
-            return;
-
-        var botUserId = botUser.Id;
         var botInSameStage = guild.VoiceStates.TryGetValue(botUserId, out var botVoiceState) &&
                              botVoiceState.ChannelId == channelId;
         var botAlreadySelfMuted = botVoiceState?.IsSelfMuted == true;
