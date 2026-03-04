@@ -85,7 +85,8 @@ public class GuestStageManager(
 
     public async Task ProcessExpiredSpeakersAsync()
     {
-        var expired = guestQueueService.GetExpiredSpeakers(DateTimeOffset.UtcNow.AddMinutes(-_botSettings.GuestTimeoutMinutes));
+        var cutoff = DateTimeOffset.UtcNow.AddMinutes(-_botSettings.GuestTimeoutMinutes);
+        var expired = guestQueueService.GetExpiredSpeakers(cutoff);
 
         foreach (var session in expired)
         {
@@ -112,6 +113,10 @@ public class GuestStageManager(
 
             await EnsureGuestSpeakersAsync(session.GuildId, session.ChannelId);
         }
+
+        var expiredSlots = guestQueueService.RemoveExpiredSlots(cutoff);
+        foreach (var guildId in expiredSlots.Select(entry => entry.GuildId).Distinct())
+            await EnsureGuestSpeakersAsync(guildId);
     }
 
     public async Task EnsureGuestSpeakersAsync(ulong guildId, ulong? preferredStageChannelId = null)
@@ -136,6 +141,13 @@ public class GuestStageManager(
             guestQueueService.MarkSpeakerStarted(guildId, channelId, guestUserId);
 
         var activeGuestSpeakers = trackedGuestSessions.Length;
+        var activeStageSpeakers = guild.VoiceStates.Values.Count(vs => vs.ChannelId == channelId && !vs.Suppressed);
+
+        if (activeStageSpeakers == 0)
+        {
+            guestQueueService.ClearSlots(guildId);
+            return;
+        }
 
         var consideredSlotUsers = new HashSet<ulong>(trackedGuestSessions);
 

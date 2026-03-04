@@ -11,7 +11,7 @@ public enum GuestQueueAddResult
     SlotsFull
 }
 
-public readonly record struct GuestQueueEntry(ulong GuestUserId);
+public readonly record struct GuestQueueEntry(ulong GuestUserId, DateTimeOffset AddedAt);
 
 public readonly record struct GuestSpeakerSession(ulong GuildId, ulong ChannelId, ulong UserId, DateTimeOffset StartedAt);
 
@@ -56,7 +56,7 @@ public class GuestQueueService(IOptions<BotSettings> botSettings)
             if (state.Slots.Count >= _botSettings.GuestSlotCount)
                 return GuestQueueAddResult.SlotsFull;
 
-            state.Slots.AddLast(new GuestQueueEntry(guestUserId));
+            state.Slots.AddLast(new GuestQueueEntry(guestUserId, DateTimeOffset.UtcNow));
             return GuestQueueAddResult.Added;
         }
     }
@@ -167,6 +167,45 @@ public class GuestQueueService(IOptions<BotSettings> botSettings)
         }
 
         return expired;
+    }
+
+    public IReadOnlyList<(ulong GuildId, ulong UserId)> RemoveExpiredSlots(DateTimeOffset cutoff)
+    {
+        var removed = new List<(ulong GuildId, ulong UserId)>();
+
+        foreach (var (guildId, state) in _guildStates)
+        {
+            lock (state.Sync)
+            {
+                var node = state.Slots.First;
+                while (node is not null)
+                {
+                    var next = node.Next;
+                    if (node.Value.AddedAt <= cutoff)
+                    {
+                        var userId = node.Value.GuestUserId;
+                        state.Slots.Remove(node);
+                        state.ActiveSpeakers.Remove(userId);
+                        removed.Add((guildId, userId));
+                    }
+
+                    node = next;
+                }
+            }
+        }
+
+        return removed;
+    }
+
+    public void ClearSlots(ulong guildId)
+    {
+        if (!_guildStates.TryGetValue(guildId, out var state))
+            return;
+
+        lock (state.Sync)
+        {
+            state.Slots.Clear();
+        }
     }
 
     private sealed class GuildGuestState
