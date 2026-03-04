@@ -2,6 +2,7 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 using NetCord.Rest;
+using System.Net;
 
 namespace StreamerBot;
 
@@ -9,6 +10,7 @@ public class VoiceStateHandler(GatewayClient gatewayClient, RestClient restClien
 {
     private const ulong StreamerRoleId = 1286113718635204648;
     private const ulong ModRoleId = 1152657002212884550;
+    private const int UnknownVoiceStateCode = 10065;
 
     public async ValueTask HandleAsync(VoiceState newState)
     {
@@ -27,7 +29,7 @@ public class VoiceStateHandler(GatewayClient gatewayClient, RestClient restClien
                 if (vs.UserId == botUserId)
                     return false;
 
-                // Use incoming event state for the updated user to avoid stale-cache behavior on leave events.
+                // Use the incoming event state for the updated user to avoid stale-cache behavior on leave events.
                 if (vs.UserId == newState.UserId)
                     return newState.ChannelId == botChannelId && !newState.Suppressed;
 
@@ -92,14 +94,25 @@ public class VoiceStateHandler(GatewayClient gatewayClient, RestClient restClien
         {
             await gatewayClient.UpdateVoiceStateAsync(
                 new VoiceStateProperties(newState.GuildId, channelId)
-                    .WithSelfMute(true)
-                    .WithSelfDeaf(true));
+                    .WithSelfMute()
+                    .WithSelfDeaf());
         }
 
-        await restClient.ModifyCurrentGuildUserVoiceStateAsync(
-            newState.GuildId,
-            options => options
-                .WithChannelId(channelId)
-                .WithSuppress(false));
+        var botIsSuppressedInStage = botInSameStage && botVoiceState?.Suppressed == true;
+        if (!botIsSuppressedInStage)
+            return;
+
+        try
+        {
+            await restClient.ModifyCurrentGuildUserVoiceStateAsync(
+                newState.GuildId,
+                options => options
+                    .WithChannelId(channelId)
+                    .WithSuppress(false));
+        }
+        catch (RestException ex) when (ex is { StatusCode: HttpStatusCode.NotFound, Error.Code: UnknownVoiceStateCode })
+        {
+            // Discord can return Unknown Voice State briefly while the bot join state propagates.
+        }
     }
 }
