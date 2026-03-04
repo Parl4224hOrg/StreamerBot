@@ -4,14 +4,18 @@ using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Services;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Services.ApplicationCommands;
-using Microsoft.Extensions.Options;
 using StreamerBot;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services
     .AddOptions<BotSettings>()
-    .Bind(builder.Configuration.GetSection(BotSettings.SectionName));
+    .Bind(builder.Configuration.GetSection(BotSettings.SectionName))
+    .Validate(settings => settings.StreamerRoleId != 0, $"{BotSettings.SectionName}:StreamerRoleId must be configured.")
+    .Validate(settings => settings.ModRoleId != 0, $"{BotSettings.SectionName}:ModRoleId must be configured.")
+    .Validate(settings => settings.GuestTimeoutMinutes > 0,
+        $"{BotSettings.SectionName}:GuestTimeoutMinutes must be greater than 0.")
+    .ValidateOnStart();
 
 builder.Services.AddSingleton<GuestQueueService>();
 builder.Services.AddSingleton<GuestStageManager>();
@@ -24,7 +28,7 @@ builder.Services
                        GatewayIntents.Guilds |
                        GatewayIntents.GuildUsers;
     })
-    .AddGatewayHandlers(typeof(VoiceStateHandler).Assembly)
+    .AddGatewayHandler<VoiceStateHandler>()
     .AddApplicationCommands<SlashCommandInteraction, SlashCommandContext>(opts =>
     {
         opts.AutoRegisterCommands = true;
