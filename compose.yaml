@@ -5,4 +5,4 @@
       context: .
       dockerfile: StreamerBot/Dockerfile
     environment:
-      DISCORD_TOKEN: "${DISCORD_TOKEN}"
+      DISCORD__TOKEN: "${DISCORD_TOKEN}"
