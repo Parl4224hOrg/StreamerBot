@@ -1,6 +1,8 @@
 ﻿services:
   streamer-bot:
     image: streamerbot
+    restart: unless-stopped
+    container_name: streamer-bot
     build:
       context: .
       dockerfile: StreamerBot/Dockerfile
