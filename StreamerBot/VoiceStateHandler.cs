@@ -2,6 +2,7 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 using NetCord.Rest;
+using Microsoft.Extensions.Options;
 using System.Net;
 
 namespace StreamerBot;
@@ -9,9 +10,11 @@ namespace StreamerBot;
 public class VoiceStateHandler(
     GatewayClient gatewayClient,
     RestClient restClient,
-    GuestStageManager guestStageManager) : IVoiceStateUpdateGatewayHandler
+    GuestStageManager guestStageManager,
+    IOptions<BotSettings> botSettings) : IVoiceStateUpdateGatewayHandler
 {
     private const int UnknownVoiceStateCode = 10065;
+    private readonly BotSettings _botSettings = botSettings.Value;
 
     public async ValueTask HandleAsync(VoiceState newState)
     {
@@ -75,8 +78,8 @@ public class VoiceStateHandler(
             if (!guild.Users.TryGetValue(newState.UserId, out var guildUser))
                 return;
 
-            var isStreamer = guildUser.RoleIds.Contains(RoleConstants.StreamerRoleId);
-            var isMod = guildUser.RoleIds.Contains(RoleConstants.ModRoleId);
+            var isStreamer = guildUser.RoleIds.Contains(_botSettings.StreamerRoleId);
+            var isMod = guildUser.RoleIds.Contains(_botSettings.ModRoleId);
             if (!isStreamer && !isMod)
                 return;
 

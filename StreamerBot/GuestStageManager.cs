@@ -1,13 +1,19 @@
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
+using Microsoft.Extensions.Options;
 using System.Net;
 
 namespace StreamerBot;
 
-public class GuestStageManager(GatewayClient gatewayClient, RestClient restClient, GuestQueueService guestQueueService)
+public class GuestStageManager(
+    GatewayClient gatewayClient,
+    RestClient restClient,
+    GuestQueueService guestQueueService,
+    IOptions<BotSettings> botSettings)
 {
     private const int UnknownVoiceStateCode = 10065;
+    private readonly BotSettings _botSettings = botSettings.Value;
 
     public async Task HandleVoiceStateUpdatedAsync(VoiceState newState)
     {
@@ -42,7 +48,7 @@ public class GuestStageManager(GatewayClient gatewayClient, RestClient restClien
 
     public async Task ProcessExpiredSpeakersAsync()
     {
-        var expired = guestQueueService.GetExpiredSpeakers(DateTimeOffset.UtcNow.AddMinutes(-1));
+        var expired = guestQueueService.GetExpiredSpeakers(DateTimeOffset.UtcNow.AddMinutes(-_botSettings.GuestTimeoutMinutes));
 
         foreach (var session in expired)
         {
@@ -199,12 +205,12 @@ public class GuestStageManager(GatewayClient gatewayClient, RestClient restClien
         return stageState?.ChannelId;
     }
 
-    private static bool IsGuest(Guild guild, ulong userId)
+    private bool IsGuest(Guild guild, ulong userId)
     {
         if (!guild.Users.TryGetValue(userId, out var guildUser))
             return true;
 
-        return !guildUser.RoleIds.Contains(RoleConstants.StreamerRoleId) &&
-               !guildUser.RoleIds.Contains(RoleConstants.ModRoleId);
+        return !guildUser.RoleIds.Contains(_botSettings.StreamerRoleId) &&
+               !guildUser.RoleIds.Contains(_botSettings.ModRoleId);
     }
 }

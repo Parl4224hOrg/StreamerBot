@@ -4,9 +4,14 @@ using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Services;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Services.ApplicationCommands;
+using Microsoft.Extensions.Options;
 using StreamerBot;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services
+    .AddOptions<BotSettings>()
+    .Bind(builder.Configuration.GetSection(BotSettings.SectionName));
 
 builder.Services.AddSingleton<GuestQueueService>();
 builder.Services.AddSingleton<GuestStageManager>();

@@ -1,4 +1,5 @@
-﻿using NetCord;
+using Microsoft.Extensions.Options;
+using NetCord;
 using NetCord.Gateway;
 using NetCord.Services.ApplicationCommands;
 
@@ -10,9 +11,12 @@ public class StreamerCommandModule : CommandModuleBase
     [SubSlashCommand("guest", "Manage guests")]
     public class GuestCommandModule(
         GuestQueueService guestQueueService,
-        GuestStageManager guestStageManager
+        GuestStageManager guestStageManager,
+        IOptions<BotSettings> botSettings
     ) : CommandModuleBase
     {
+        private readonly BotSettings _botSettings = botSettings.Value;
+
         private async Task<Guild?> EnsureInvokerAuthorizedAsync()
         {
             var guild = Context.Guild;
@@ -25,8 +29,8 @@ public class StreamerCommandModule : CommandModuleBase
             guild.Users.TryGetValue(Context.User.Id, out var invoker);
             invoker ??= await guild.GetUserAsync(Context.User.Id);
 
-            var isAuthorized = invoker.RoleIds.Contains(RoleConstants.ModRoleId) ||
-                               invoker.RoleIds.Contains(RoleConstants.StreamerRoleId);
+            var isAuthorized = invoker.RoleIds.Contains(_botSettings.ModRoleId) ||
+                               invoker.RoleIds.Contains(_botSettings.StreamerRoleId);
             if (isAuthorized)
                 return guild;
 
@@ -47,8 +51,8 @@ public class StreamerCommandModule : CommandModuleBase
             guild.Users.TryGetValue(user.Id, out var targetUser);
             targetUser ??= await guild.GetUserAsync(user.Id);
 
-            var isModOrStreamer = targetUser.RoleIds.Contains(RoleConstants.ModRoleId) ||
-                                  targetUser.RoleIds.Contains(RoleConstants.StreamerRoleId);
+            var isModOrStreamer = targetUser.RoleIds.Contains(_botSettings.ModRoleId) ||
+                                  targetUser.RoleIds.Contains(_botSettings.StreamerRoleId);
             if (isModOrStreamer)
             {
                 await ReplyAsync($"User {user.Username} is a mod or streamer and cannot be added as a guest.", true);
