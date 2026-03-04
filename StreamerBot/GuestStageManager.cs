@@ -70,6 +70,7 @@ public class GuestStageManager(
             finally
             {
                 guestQueueService.MarkSpeakerStopped(session.GuildId, session.UserId);
+                guestQueueService.RemoveQueuedGuest(session.GuildId, session.UserId);
             }
 
             await EnsureGuestSpeakersAsync(session.GuildId, session.ChannelId);
@@ -99,23 +100,35 @@ public class GuestStageManager(
 
         var activeGuestSpeakers = trackedGuestSessions.Length;
 
-        while (activeGuestSpeakers < 2)
+        var consideredSlotUsers = new HashSet<ulong>(trackedGuestSessions);
+
+        while (activeGuestSpeakers < _botSettings.GuestSlotCount)
         {
-            if (!guestQueueService.TryDequeueNextGuest(guildId, out var nextGuest))
+            if (!guestQueueService.TryGetNextGuestToPromote(guildId, consideredSlotUsers, out var nextGuest))
                 break;
 
             if (!IsGuest(guild, nextGuest.GuestUserId))
+            {
+                consideredSlotUsers.Add(nextGuest.GuestUserId);
                 continue;
+            }
 
             if (!guild.VoiceStates.TryGetValue(nextGuest.GuestUserId, out var guestVoiceState))
+            {
+                consideredSlotUsers.Add(nextGuest.GuestUserId);
                 continue;
+            }
 
             if (guestVoiceState.ChannelId != channelId)
+            {
+                consideredSlotUsers.Add(nextGuest.GuestUserId);
                 continue;
+            }
 
             if (!guestVoiceState.Suppressed)
             {
                 guestQueueService.MarkSpeakerStarted(guildId, channelId, nextGuest.GuestUserId);
+                consideredSlotUsers.Add(nextGuest.GuestUserId);
                 activeGuestSpeakers++;
                 continue;
             }
@@ -129,6 +142,7 @@ public class GuestStageManager(
                     options => options.WithSuppress(false));
 
                 guestQueueService.MarkSpeakerStarted(guildId, channelId, nextGuest.GuestUserId);
+                consideredSlotUsers.Add(nextGuest.GuestUserId);
                 activeGuestSpeakers++;
             }
             catch (RestException ex) when (ex is
@@ -136,7 +150,8 @@ public class GuestStageManager(
                                                StatusCode: HttpStatusCode.NotFound, Error.Code: UnknownVoiceStateCode
                                            })
             {
-                // User state changed while processing the queue.
+                // User state changed while processing guest slots.
+                consideredSlotUsers.Add(nextGuest.GuestUserId);
             }
         }
     }

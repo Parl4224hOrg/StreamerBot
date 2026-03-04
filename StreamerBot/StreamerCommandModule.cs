@@ -38,9 +38,9 @@ public class StreamerCommandModule : CommandModuleBase
             return null;
         }
 
-        [SubSlashCommand("add", "Add a guest to the queue")]
+        [SubSlashCommand("add", "Add a guest to an open slot")]
         public async Task AddGuest(
-            [SlashCommandParameter(Name = "guest", Description = "The user to add to the queue")]
+            [SlashCommandParameter(Name = "guest", Description = "The user to add to an open slot")]
             User user
         )
         {
@@ -61,18 +61,18 @@ public class StreamerCommandModule : CommandModuleBase
 
             guestStageManager.ReconcileGuestSpeaker(guild.Id, user.Id);
 
-            var addResult = guestQueueService.TryAddGuest(guild.Id, Context.User.Id, user.Id);
+            var addResult = guestQueueService.TryAddGuest(guild.Id, user.Id);
             switch (addResult)
             {
                 case GuestQueueAddResult.Added:
                     await guestStageManager.EnsureGuestSpeakersAsync(guild.Id);
-                    await ReplyAsync($"Guest {user.Username} added to the queue.", true);
+                    await ReplyAsync($"Guest {user.Username} added to an open slot.", true);
                     return;
-                case GuestQueueAddResult.AdderLimitReached:
-                    await ReplyAsync("You already have two guests in the queue.", true);
+                case GuestQueueAddResult.SlotsFull:
+                    await ReplyAsync($"All {_botSettings.GuestSlotCount} guest slots are full.", true);
                     return;
                 case GuestQueueAddResult.AlreadyQueued:
-                    await ReplyAsync("The guest is already in the queue.", true);
+                    await ReplyAsync("The guest is already in a slot.", true);
                     return;
                 case GuestQueueAddResult.AlreadySpeaking:
                     await ReplyAsync("The guest is already speaking.", true);
@@ -80,9 +80,9 @@ public class StreamerCommandModule : CommandModuleBase
             }
         }
 
-        [SubSlashCommand("remove", "Remove a guest from the queue")]
+        [SubSlashCommand("remove", "Remove a guest from a slot")]
         public async Task RemoveGuest(
-            [SlashCommandParameter(Name = "guest", Description = "The user to add to the queue")]
+            [SlashCommandParameter(Name = "guest", Description = "The user to remove from a slot")]
             User user
         )
         {
@@ -93,22 +93,23 @@ public class StreamerCommandModule : CommandModuleBase
             var removed = guestQueueService.RemoveQueuedGuest(guild.Id, user.Id);
             if (removed)
             {
-                await ReplyAsync($"Guest {user.Username} removed from the queue.", true);
+                await ReplyAsync($"Guest {user.Username} removed from the slots.", true);
                 return;
             }
 
-            await ReplyAsync("That guest is not currently in the queue.", true);
+            await ReplyAsync("That guest is not currently in a slot.", true);
         }
 
-        [SubSlashCommand("list", "List all guests in the queue")]
+        [SubSlashCommand("list", "List all occupied guest slots")]
         public async Task ListGuests()
         {
             var guild = await EnsureInvokerAuthorizedAsync();
             if (guild is null)
                 return;
 
+            var occupiedSlots = guestQueueService.GetOccupiedSlotCount(guild.Id);
             var guests = guestQueueService.GetGuests(guild.Id);
-            await ReplyAsync($"Guests in queue:\n{guests}", true);
+            await ReplyAsync($"Guests in slots ({occupiedSlots}/{_botSettings.GuestSlotCount}):\n{guests}", true);
         }
     }
 }

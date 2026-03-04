@@ -11,6 +11,8 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services
     .AddOptions<BotSettings>()
     .Bind(builder.Configuration.GetSection(BotSettings.SectionName))
+    .Validate(settings => settings.GuestSlotCount > 0,
+        $"{BotSettings.SectionName}:GuestSlotCount must be greater than 0.")
     .Validate(settings => settings.StreamerRoleId != 0, $"{BotSettings.SectionName}:StreamerRoleId must be configured.")
     .Validate(settings => settings.ModRoleId != 0, $"{BotSettings.SectionName}:ModRoleId must be configured.")
     .Validate(settings => settings.GuestTimeoutMinutes > 0,

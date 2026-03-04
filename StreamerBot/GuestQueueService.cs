@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Options;
 
 namespace StreamerBot;
 
@@ -7,24 +8,40 @@ public enum GuestQueueAddResult
     Added,
     AlreadyQueued,
     AlreadySpeaking,
-    AdderLimitReached
+    SlotsFull
 }
 
-public readonly record struct GuestQueueEntry(ulong GuestUserId, ulong AddedByUserId);
+public readonly record struct GuestQueueEntry(ulong GuestUserId);
 
 public readonly record struct GuestSpeakerSession(ulong GuildId, ulong ChannelId, ulong UserId, DateTimeOffset StartedAt);
 
-public class GuestQueueService
+public class GuestQueueService(IOptions<BotSettings> botSettings)
 {
+    private readonly BotSettings _botSettings = botSettings.Value;
     private readonly ConcurrentDictionary<ulong, GuildGuestState> _guildStates = new();
 
     public string GetGuests(ulong guildId)
     {
         var state = _guildStates.GetOrAdd(guildId, static _ => new GuildGuestState());
-        return string.Join(", ", state.Queue.Select(entry => $"<@{entry.GuestUserId}>"));
+        lock (state.Sync)
+        {
+            if (state.Slots.Count == 0)
+                return "No guests in slots.";
+
+            return string.Join(", ", state.Slots.Select(entry => $"<@{entry.GuestUserId}>"));
+        }
+    }
+
+    public int GetOccupiedSlotCount(ulong guildId)
+    {
+        var state = _guildStates.GetOrAdd(guildId, static _ => new GuildGuestState());
+        lock (state.Sync)
+        {
+            return state.Slots.Count;
+        }
     }
     
-    public GuestQueueAddResult TryAddGuest(ulong guildId, ulong addedByUserId, ulong guestUserId)
+    public GuestQueueAddResult TryAddGuest(ulong guildId, ulong guestUserId)
     {
         var state = _guildStates.GetOrAdd(guildId, static _ => new GuildGuestState());
 
@@ -33,14 +50,13 @@ public class GuestQueueService
             if (state.ActiveSpeakers.ContainsKey(guestUserId))
                 return GuestQueueAddResult.AlreadySpeaking;
 
-            if (state.Queue.Any(entry => entry.GuestUserId == guestUserId))
+            if (state.Slots.Any(entry => entry.GuestUserId == guestUserId))
                 return GuestQueueAddResult.AlreadyQueued;
 
-            var addedByCount = state.Queue.Count(entry => entry.AddedByUserId == addedByUserId);
-            if (addedByCount >= 2)
-                return GuestQueueAddResult.AdderLimitReached;
+            if (state.Slots.Count >= _botSettings.GuestSlotCount)
+                return GuestQueueAddResult.SlotsFull;
 
-            state.Queue.AddLast(new GuestQueueEntry(guestUserId, addedByUserId));
+            state.Slots.AddLast(new GuestQueueEntry(guestUserId));
             return GuestQueueAddResult.Added;
         }
     }
@@ -52,12 +68,12 @@ public class GuestQueueService
 
         lock (state.Sync)
         {
-            var node = state.Queue.First;
+            var node = state.Slots.First;
             while (node is not null)
             {
                 if (node.Value.GuestUserId == guestUserId)
                 {
-                    state.Queue.Remove(node);
+                    state.Slots.Remove(node);
                     return true;
                 }
 
@@ -68,7 +84,7 @@ public class GuestQueueService
         }
     }
 
-    public bool TryDequeueNextGuest(ulong guildId, out GuestQueueEntry entry)
+    public bool TryGetNextGuestToPromote(ulong guildId, ISet<ulong> activeSpeakerUserIds, out GuestQueueEntry entry)
     {
         entry = default;
 
@@ -77,12 +93,16 @@ public class GuestQueueService
 
         lock (state.Sync)
         {
-            if (state.Queue.First is null)
-                return false;
+            foreach (var slotEntry in state.Slots)
+            {
+                if (activeSpeakerUserIds.Contains(slotEntry.GuestUserId))
+                    continue;
 
-            entry = state.Queue.First.Value;
-            state.Queue.RemoveFirst();
-            return true;
+                entry = slotEntry;
+                return true;
+            }
+
+            return false;
         }
     }
 
@@ -153,7 +173,7 @@ public class GuestQueueService
     {
         public object Sync { get; } = new();
 
-        public LinkedList<GuestQueueEntry> Queue { get; } = new();
+        public LinkedList<GuestQueueEntry> Slots { get; } = new();
 
         public Dictionary<ulong, GuestSpeakerSession> ActiveSpeakers { get; } = new();
     }
