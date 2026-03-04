@@ -75,8 +75,8 @@ public class VoiceStateHandler(
                 }
             }
 
-            if (!guild.Users.TryGetValue(newState.UserId, out var guildUser))
-                return;
+            guild.Users.TryGetValue(newState.UserId, out var guildUser);
+            guildUser ??= await guild.GetUserAsync(newState.UserId);
 
             var isStreamer = guildUser.RoleIds.Contains(_botSettings.StreamerRoleId);
             var isMod = guildUser.RoleIds.Contains(_botSettings.ModRoleId);
