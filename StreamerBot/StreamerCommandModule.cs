@@ -93,6 +93,7 @@ public class StreamerCommandModule : CommandModuleBase
             var removed = guestQueueService.RemoveQueuedGuest(guild.Id, user.Id);
             if (removed)
             {
+                await guestStageManager.SuppressGuestAsync(guild.Id, user.Id);
                 await ReplyAsync($"Guest {user.Username} removed from the slots.", true);
                 return;
             }

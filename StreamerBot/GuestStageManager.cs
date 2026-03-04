@@ -15,6 +15,43 @@ public class GuestStageManager(
     private const int UnknownVoiceStateCode = 10065;
     private readonly BotSettings _botSettings = botSettings.Value;
 
+    public async Task SuppressGuestAsync(ulong guildId, ulong userId)
+    {
+        if (!gatewayClient.Cache.Guilds.TryGetValue(guildId, out var guild))
+            return;
+
+        ulong? stageChannelId = null;
+        if (guild.VoiceStates.TryGetValue(userId, out var voiceState) &&
+            voiceState.ChannelId is { } channelId &&
+            guild.Channels.TryGetValue(channelId, out var channel) &&
+            channel is StageGuildChannel)
+        {
+            stageChannelId = channelId;
+
+            if (!voiceState.Suppressed)
+            {
+                try
+                {
+                    await restClient.ModifyGuildUserVoiceStateAsync(
+                        guildId,
+                        channelId,
+                        userId,
+                        options => options.WithSuppress());
+                }
+                catch (RestException ex) when (ex is
+                                               {
+                                                   StatusCode: HttpStatusCode.NotFound, Error.Code: UnknownVoiceStateCode
+                                               })
+                {
+                    // State is already gone or out of date.
+                }
+            }
+        }
+
+        guestQueueService.MarkSpeakerStopped(guildId, userId);
+        await EnsureGuestSpeakersAsync(guildId, stageChannelId);
+    }
+
     public async Task HandleVoiceStateUpdatedAsync(VoiceState newState)
     {
         if (!gatewayClient.Cache.Guilds.TryGetValue(newState.GuildId, out var guild))
