@@ -18,6 +18,8 @@ public class VoiceStateHandler(
 
     public async ValueTask HandleAsync(VoiceState newState)
     {
+        var configuredChannelId = _botSettings.ChannelId;
+
         try
         {
             if (!gatewayClient.Cache.Guilds.TryGetValue(newState.GuildId, out var guild))
@@ -28,6 +30,9 @@ public class VoiceStateHandler(
                 return;
 
             var botUserId = botUser.Id;
+            if (newState.ChannelId != configuredChannelId)
+                return;
+
             if (guild.VoiceStates.TryGetValue(botUserId, out var botState) && botState.ChannelId is { } botChannelId)
             {
                 var updatedUserLeftBotChannel = newState.UserId != botUserId && newState.ChannelId != botChannelId;
@@ -139,7 +144,9 @@ public class VoiceStateHandler(
         }
         finally
         {
-            await guestStageManager.HandleVoiceStateUpdatedAsync(newState);
+            var isUpdateInConfiguredChannel = newState.ChannelId == configuredChannelId;
+            if (isUpdateInConfiguredChannel)
+                await guestStageManager.HandleVoiceStateUpdatedAsync(newState);
         }
     }
 }

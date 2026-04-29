@@ -11,4 +11,6 @@ public class BotSettings
     public ulong StreamerRoleId { get; set; }
 
     public ulong ModRoleId { get; set; }
+
+    public ulong ChannelId { get; set; }
 }
